@@ -10,7 +10,12 @@
   >
     <transition leave-active-class="animated fadeOut fast">
       <div class="invitation-container" v-show="!submitData.pending.on">
-        <form enctype="multipart/form-data" :id="formID" autocomplete="off">
+        <form
+          ref="form"
+          enctype="multipart/form-data"
+          :id="formID"
+          autocomplete="off"
+        >
           <div class="invitation-items">
             <div
               class="invitation-item"
@@ -24,7 +29,6 @@
                 :name="item.input.name"
                 :type="item.input.type"
                 v-model="item.bindVal"
-                @change="inputChangeHandler(index)"
               />
             </div>
           </div>
@@ -100,26 +104,24 @@ export default {
           isSelect: true
         }
       },
-      profile: {
-        name: '',
-        telNum: undefined,
-        wechatID: ''
-      },
       invitationItems: [
         {
           label: '姓名',
           input: { id: 'name', type: 'text', name: 'name' },
-          bindVal: ''
+          bindVal: '',
+          show: true
         },
         {
           label: '微信号',
           input: { id: 'wechat-ID', type: 'text', name: 'wechat' },
-          bindVal: ''
+          bindVal: '',
+          show: false
         },
         {
           label: '手机号',
           input: { id: 'tel-num', type: 'text', name: 'phone' },
-          bindVal: undefined
+          bindVal: undefined,
+          show: true
         }
       ],
       submitData: {
@@ -159,7 +161,9 @@ export default {
         currentHeight: 0,
         currentWidth: 0
       },
-      canItemShowDataArrar: [true, false, true]
+      canItemShowDataArrar: [true, false, true],
+      isRepeated: false,
+      oldName: undefined
     };
   },
   computed: {
@@ -176,6 +180,7 @@ export default {
     canWechatInputShow() {
       //1为wechat在invitationitems数组里的索引，用计算出来更好
       this.canItemShowDataArrar[1] = this.canWechatInputShow;
+      this.invitationItems[1].show = this.canWechatInputShow;
     }
   },
   methods: {
@@ -194,28 +199,28 @@ export default {
         sr.on = false;
       }, duration);
     },
-    submitCallback(status = '', inBox = {}) {
+    submitCallback(status = '', target = {}, text = '') {
       const sd = this.submitData;
       const st = this.submitStatus;
 
       const loadingTarget = sd.loading.el;
-      const duration = 2500;
-      const inBoxHandler = () => {
+      const duration = 1000;
+      const targetHandler = () => {
         switch (status) {
           case 'success':
             sd.success.on = true;
-            this.toast({ text: '提交成功！', duration });
+            this.toast({ text: text || '提交成功', duration });
             break;
           case 'failure':
             sd.failure.on = true;
-            this.toast({ text: '提交失败！', duration });
+            this.toast({ text: text || '提交失败', duration });
             break;
         }
       };
       const animationEndHandler = () => {
         loadingTarget.classList.remove(sd.loading.step2);
         //重新出现提交框
-        inBox.addEventListener(this.$animationEnd, inBoxHandler, {
+        target.addEventListener(this.$animationEnd, targetHandler, {
           capture: true,
           once: true
         });
@@ -241,7 +246,6 @@ export default {
       const loading = sd.loading.el || document.createElement('div');
       const animationEndHandler = () => {
         const br = target.getBoundingClientRect();
-        console.log(br);
         //24为loading div的一半
         loading.classList.add(sd.loading.step2);
         loading.style.top = br.top - 24 + 'px';
@@ -295,48 +299,112 @@ export default {
       }
       return -1;
     },
-    beforeSubmitHandler() {
-      let detectedData = [];
-      for (let i of this.invitationItems) {
-        detectedData.push(i.bindVal);
+    createLegalRules(arr = [], rules = ['name', 'wechat', 'phone']) {
+      //生成所需要的规则
+      const ret = [];
+      const length = arr.length;
+      for (let i = 0; i < length; i++) {
+        if (arr[i]) {
+          ret.push(rules[i]);
+        }
       }
+      return ret;
+    },
+    beforeSubmitHandler() {
+      this.isRepeated =
+        this.oldName === this.invitationItems[0].bindVal ? true : false;
+
+      if (this.isRepeated) {
+        this.toast({
+          text: '请勿重复提交!',
+          duration: 1000
+        });
+        return false;
+      }
+      let detectedData = [];
+
+      const items = this.invitationItems;
+      const realItems = [];
+      const length = this.invitationItems.length;
+      for (let i = 0; i < length; i++) {
+        if (this.canItemShowDataArrar[i]) {
+          detectedData.push(items[i].bindVal);
+          realItems.push(items[i]);
+        }
+      }
+      // for(let i of items){
+      //   if(i.show){
+      //     detectedData.push(i.bindVal);
+      //     realItems.push(i);
+      //   }
+      // }
+      //判断重复提交
 
       //check empty vals
-      const emptyVal = this.checkFormDataHasEmpty(detectedData);
-      emptyVal !== -1 &&
+      const emptyItemIndex = this.checkFormDataHasEmpty(detectedData);
+      emptyItemIndex !== -1 &&
         this.toast({
-          text: this.invitationItems[emptyVal].label + '不能为空',
-          duration: 1500
+          text: realItems[emptyItemIndex].label + '不能为空',
+          duration: 1000
         });
       //check rule vals
-      const illegalVal =
-        emptyVal === -1 ? this.checkFormDataIsLegal(detectedData) : -1;
+      const illegalItemIndex =
+        emptyItemIndex === -1
+          ? this.checkFormDataIsLegal(
+              detectedData,
+              this.createLegalRules(this.canItemShowDataArrar)
+            )
+          : -1;
 
-      illegalVal !== -1 &&
+      illegalItemIndex !== -1 &&
         this.toast({
-          text: this.invitationItems[illegalVal].label + '不符合规范',
-          duration: 1500
+          text: realItems[illegalItemIndex].label + '不符合规范',
+          duration: 1000
         });
-      return emptyVal === -1 && illegalVal === -1 ? true : false;
+      return emptyItemIndex === -1 && illegalItemIndex === -1 ? true : false;
     },
     submit() {
-      const url = '/store';
-      const profile = this.profile;
       //获得动画过渡元素
       const target = this.$el;
-      const form = document.getElementById(this.formID);
+      const form = this.$refs.form;
+      const url = '/store';
+      if (!form) return;
+
       const formData = new FormData(form);
+      const items = this.invitationItems;
       formData.append('isroom', this.isSelect);
+
+      //1.检查formdata哪些数据是不需要提交的
+      //2.并附加需要/不需要提交的数据的参数提示
+      // for (let i of items) {
+      //   if (!i.show) {
+      //       formData.delete(i.input.name);
+      //     formData.append('is' + i.input.name, 0);
+      //     formData.set(i.input.name, '');
+      //     formData.delete(i.input.name);
+      //   }
+      //   formData.append('is' + i.input.name, 1);
+      // }
+      // formData.forEach(item => {
+      //   console.log(item);
+      // });
       /*Check the phone numbers here*/
       this.submitLoading(target);
       this.$http
         .post(url, formData)
         .then(res => {
           const data = res.data;
+
           if (data.status === 200) {
+            this.oldName = this.invitationItems[0].bindVal;
             this.submitCallback('success', target);
           } else if (data.status === 403) {
             this.submitCallback('failure', target);
+          } else if (data.status === 401) {
+            this.isRepeated = true;
+            this.oldName = this.invitationItems[0].bindVal;
+            const text = data.msg || '请勿重复提交!';
+            this.submitCallback('failure', target, text);
           }
         })
         .catch(err => {
@@ -376,7 +444,8 @@ export default {
     const VH = 66;
     const ratio = 66 * 0.01;
     this.changeRemSize();
-    this.$el.style.minHeight = window.visualViewport.height * ratio + 'px';
+    //window.visualViewport貌似不兼容 华为的默认浏览器
+    this.$el.style.minHeight = window.innerHeight * ratio + 'px';
     window.addEventListener('resize', this.resizeHandler);
   }
 };
@@ -434,17 +503,17 @@ export default {
   -webkit-transition: all 0.5s ease-in-out;
   transition: all 0.5s ease-in-out;
   z-index: -1;
-  -webkit-transform: translateY(0px);
-  transform: translateY(0px);
+  -webkit-transform: translateY(0px) rotateX(10deg) scale(0.95, 0.95);
+  transform: translateY(0px) rotateX(10deg) scale(0.95, 0.95);
   opacity: 0;
   line-height: 35px;
   box-shadow: 2px 3px 4px #aaa;
 }
 
 .submit-result-on {
-  transform: translateY(50px);
+  transform: translateY(50px) rotateX(0deg) scale(1, 1);
   opacity: 1;
-  z-index: 1;
+  z-index: 9999;
 }
 
 .submit-res-loading-step1 {
@@ -522,6 +591,7 @@ export default {
   padding: 4.3% 0;
   color: #000;
   transition: all 0.5s ease-in-out;
+  z-index: 2;
 
   & label {
     font-size: 1.125rem;
@@ -672,6 +742,7 @@ input:-internal-autofill-selected {
 .invi-item-hidden {
   margin-top: -50px;
   opacity: 0;
+  z-index: 0;
 }
 </style>
 

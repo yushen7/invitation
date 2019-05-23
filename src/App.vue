@@ -1,9 +1,9 @@
 <template>
   <div
     id="app"
-    @touchstart.capture="ontouchstart"
-    @touchmove.capture="ontouchmove"
-    @touchend.capture="ontouchend"
+    @touchstart="ontouchstart"
+    @touchmove.prevent="ontouchmove"
+    @touchend="ontouchend"
   >
     <div class="gesture-box">
       <transition :name="transitionName">
@@ -31,7 +31,8 @@ export default {
         },
         moveFlag: true
       },
-      transitionName: ''
+      transitionName: '',
+      usLogo: require('@/assets/uslogo.png')
     };
   },
   computed: {
@@ -74,8 +75,10 @@ export default {
       const isTouchMoveToDown = offsetY >= 10 ? true : false;
 
       if (isTouchmoveToTop && slideToTopFlag) {
+        e.preventDefault();
         this.index++;
       } else if (isTouchMoveToDown && slideToDownFlag) {
+        e.preventDefault();
         this.index--;
       }
     }
@@ -122,12 +125,33 @@ body {
   margin: 0;
 }
 
+#app {
+  z-index: -1;
+  width: 100%;
+  height: 100vh;
+}
+
+.uslogo-wrapper {
+  position: absolute;
+  width: 8vw;
+  height: 4vw;
+  bottom: 0;
+  left: 46vw;
+  max-width: 48px;
+
+  img {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+}
+
 .touchmove-to-top-tips {
   position: fixed;
   bottom: 10px;
   width: 8vw;
   height: 4vw;
-  left: 44vw;
+  left: 46vw;
   animation: wave 1.5s linear infinite;
   background-image: url('./assets/slideDown.png');
   background-size: 100% 100%;
